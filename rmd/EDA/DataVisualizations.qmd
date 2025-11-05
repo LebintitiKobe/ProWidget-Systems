@@ -1,0 +1,158 @@
+---
+title: "DataViz"
+author: "Lebintiti Kobe"
+format: html
+editor_options: 
+  chunk_output_type: console
+---
+
+# Business Problem / Stakeholder Request
+
+> As an analyst for ProWidget Systems, a UK-based B2B (business-to-business) retailer, you’ve been asked to report on spending volumes for London-based customers versus those based in the rest of the United Kingdom. The board has supplied a high-level data extract containing all customers’ addresses and their total spending to date.
+>
+> They want to know :
+>
+> -   Which UK cities are currently underserved
+> -   Whether their customers are primarily London based
+
+Our data is cleaned / prepared , lets remind ourselves of what need to be done here
+
+# Results Driven Approach
+
+## 2. Start At The End
+
+What does our minimum viable solution look like ?
+
+-   A table / bar-plot showing total spend by city . This will answer two of the questions of interest , then
+-   A table showing total spend of London vs all other cities combined . One for all UK cities combined and one with all other cities including those not in the UK
+
+So a presentation with these will do the trick
+
+# Create the necessary visualizations
+
+```{r}
+require(here)
+require(tidyverse)
+require(ggplot2)
+require(ggthemes)
+require(extrafont)
+require(gtExtras)
+
+fonts()
+```
+
+```{r}
+theme_set(
+  theme_fivethirtyeight(base_family = "Arial Black",base_size = 13)+
+    theme(axis.title = element_text(face = 1,colour = "grey20"),
+          axis.text = element_text(family = "Tahoma",colour = "grey30",face = 2),
+          axis.title.x = element_text(margin = margin(t=15)),
+          axis.title.y = element_text(margin = margin(r=15)))
+)
+```
+
+```{r}
+
+data <- read.csv(here("data/clean.csv")) %>% as_tibble()
+data
+
+city_agg <- data %>%
+  group_by(city)%>%
+  summarise(spend_city = sum(total_spend)) %>%
+  ungroup()%>%
+  arrange(desc(spend_city))
+
+city_agg
+
+mean_city_spend <- city_agg %>%
+  filter(city!="OTHER")%>%
+  summarise(avg_spend = mean(spend_city))
+```
+
+## Plot
+
+```{r}
+require(scales)
+
+city_agg %>%
+  slice_head(n=10)%>%
+  ggplot(aes(x=spend_city,y=reorder(city,spend_city),label = spend_city))+
+  geom_col(show.legend = F , fill=4)+
+  geom_text(aes(label = label_currency(scale = 0.000001, suffix = "M")(spend_city)),
+            hjust = -0.2, size = 3.2,fontface = 4,colour = 4) +
+  labs(y="City",x="Total Spend ($)")+
+  scale_x_continuous(n.breaks = 6,
+                     labels = label_currency(scale = 0.000001,suffix = "M"),
+                     limits = c(0,300000000))
+
+  ggsave(,filename = "TopSpend.png",device = png(),path = here("images/DataVizOutputs"),dpi = 500)
+  
+dev.off()
+dev.off()
+
+city_agg %>%
+  slice_head(n=20)%>%
+  ggplot(aes(x=spend_city,y=reorder(city,spend_city),label = spend_city))+
+  geom_col(show.legend = F , fill=4)+
+  geom_vline(xintercept = mean_city_spend$avg_spend,
+             linewidth = 1,
+             colour = 6,
+             linetype = 5)+
+  geom_text(aes(x = mean_city_spend$avg_spend,
+                y=9,
+                label = paste0("Avg Spend ( ",
+                              label_currency(scale = 0.000001,suffix = "M")(mean_city_spend$avg_spend),
+                              " )"),
+                family = 3,vjust = 7.0,hjust = 0.3,
+                angle = 90),size = 4.5,lineheight = 0,colour = 6)+
+  geom_text(aes(label = label_currency(scale = 0.000001, suffix = "M")(spend_city)),
+            hjust = -0.2,size = 3.2,fontface = 4,colour = 4) +
+  labs(y="City",x="Total Spend ($)")+
+  scale_x_continuous(n.breaks = 6,
+                     labels = label_currency(scale = 0.000001,suffix = "M"),
+                     limits = c(0,300000000))
+
+ggsave(filename = "LowSpend.png",device = png(),path = here("images/DataVizOutputs"),dpi = 500)
+
+dev.off()
+dev.off()
+
+city_agg %>%
+  filter(spend_city>mean_city_spend$avg_spend)%>%
+  pull(city)%>%
+  cat(sep = ",")
+```
+
+## London Vs Others
+
+```{r}
+city_agg %>%
+  mutate(city = ifelse(city!="LONDON","OTHER",city))%>%
+  group_by(city)%>%
+  summarise(spend = sum(spend_city))%>%
+  mutate(city = ifelse(city=="OTHER","OTHER(ALL)",city))%>%
+  gt()%>%
+  gt::fmt_currency(spend,suffixing = T)%>%
+  gt_theme_538()%>%
+  gt::tab_options(table.width = pct(50))%>%
+  opt_stylize(color = "gray",style = 6)%>%
+  gtsave(filename = "London Vs Other.png",
+         path=here("images/DataVizOutputs"),
+         zoom=1)
+  
+
+city_agg %>%
+  filter(city!="OTHER")%>%
+  mutate(city = ifelse(city!="LONDON","OTHER",city))%>%
+  group_by(city)%>%
+  summarise(spend = sum(spend_city))%>%
+  mutate(city = ifelse(city=="OTHER","OTHER(UK)",city))%>%
+  gt()%>%
+  gt::fmt_currency(spend,suffixing = T)%>%
+  gt_theme_538()%>%
+  gt::tab_options(table.width = pct(50))%>%
+  opt_stylize(color = "gray",style = 6)%>%
+  gtsave(filename = "London vs OtherUK.png",
+         path = here("images/DataVizOutputs"),
+         zoom = 1)
+```

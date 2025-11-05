@@ -1,0 +1,333 @@
+---
+title: "Preparing the data"
+author: "Lebintiti Kobe"
+format: html
+editor_options: 
+  chunk_output_type: console
+---
+
+# Business Problem / Stakeholder Request
+
+> As an analyst for ProWidget Systems, a UK-based B2B (business-to-business) retailer, you’ve been asked to report on spending volumes for London-based customers versus those based in the rest of the United Kingdom. The board has supplied a high-level data extract containing all customers’ addresses and their total spending to date.
+>
+> They want to know :
+>
+> -   Which UK cities are currently underserved
+> -   Whether their customers are primarily London based
+
+# **Results Driven Approach**
+
+------------------------------------------------------------------------
+
+## **1. Understanding the problem**
+
+**Understand the problem fully including individual terms and concepts . Do requirements gathering**
+
+-   **To really understand we need to know how the stakeholders intend to use the results of our analysis .**
+-   **They want to know a couple of things**
+
+### **a. Spending volumes for London-based customers versus those based in the rest of the United Kingdom**
+
+**"Rest of the United Kingdom" , since we comparing London which is a city in UK , its safe to assume that we comparing it to other cities in UK . We use a city level granularity .**
+
+**Default interpretation of "Spending Volume" is Total Spend , given their goal is just to compare spending volumes and nothing more than that .**
+
+**If they wanted to figure out how to allocate marketing funds , then the right metric to use is Total Spend per Capita**
+
+**If they wanted to know which places has high value customers then the right metric is Average Spend Per Customer / Transaction .**
+
+**For now we go with the simpler assumption in order to reach a minimum viable answer / first draft solution in which we will iterate on if necessary , and note other possible metrics down**
+
+### **b. Which UK cities are currently underserved ?**
+
+**"Underserved" , can mean a lot of things , can mean which cities have low Spend compared to others . Or which cities have a low Spend per Capita .**
+
+-   **But since we dont know the exact goal of our stakeholder , we go with simple option , so we can arrive at our first draft fast , then iterate if the stakeholders deem it necessary .**
+
+### **c. Whether their customers are primarily London based ?**
+
+**Here my interpretation is that the city with the highest spend will be the one with our primary customer base . This can be answered use results of a./b.**
+
+**Another option is using a different metric like number of distinct customers in each city .**
+
+**But we keep things simple here for the first draft .**
+
+**Now that we made our assumptions and decided on how to proceed , note other options so stakeholder can know about the further work that can be done to improve our analysis .**
+
+------------------------------------------------------------------------
+
+------------------------------------------------------------------------
+
+## 2. Start At The End
+
+What does our minimum viable solution look like ?
+
+-   A table / bar-plot showing total spend by city . This will answer two of the questions of interest , then
+-   A table showing total spend of London vs all other cities combined . One for all UK cities combined and one with all other cities including those not in the UK
+
+So a presentation with these will do the trick
+
+------------------------------------------------------------------------
+
+------------------------------------------------------------------------
+
+## 3. Identify
+
+Identify all resources need to get our minimum viable solution . Identify the data , people and access permission we need to get our minimum viable solution
+
+### Data Needed
+
+-   First thing first is to understand how the company operates when dealing with customers , how sales are recorded , how many data sources are there and figure out explanations of the variables recorded .
+
+-   We need data of all purchases made by all our customers in the company , it would be nice if the data has a customer IDs , Customer Addresses in which we can extract city data and Some Metric we can use to get total spend for each customer .
+
+-   We need to know who has the data , how to access it and permissions we need to get it
+
+## 4. Obtain the data
+
+In our case the data is provided to us by the stakeholders
+
+# Data
+
+## Explore the data
+
+```{r}
+options(scipen = 999)
+require(here)
+require(tidyverse)
+require(skimr)
+
+set.seed(46762)
+
+data <- read.csv(here("data/addresses.csv")) %>% as_tibble()
+
+skim(data)
+Hmisc::describe(data,listunique=2)
+```
+
+Data Validation :
+
+a)  total_spend ranges from 0 to 11700 , suggesting no violations of business logic , But we need to investigate the \$0 transactions
+
+b)  company_id are fine , we have 100000 distinct ids
+
+c)  address seem a little concerning , if we have 10000 unique companies then we should have 100000 unique addresses , also we have missing addresses
+
+------------------------------------------------------------------------
+
+Let us tackle these issues
+
+------------------------------------------------------------------------
+
+a)  total_spend
+
+```{r}
+data %>%
+  filter(total_spend==0)%>%
+  slice_sample(n=20)
+```
+
+This may be companies that are potential customers but we haven't yet tried to make business with them . So leave them as they are , note this down and ask stakeholders later
+
+------------------------------------------------------------------------
+
+c)  addresses
+
+```{r}
+data %>%
+  filter(address == "")%>%
+  slice_sample(n=20)
+
+data %>%
+  filter(address == "")%>%
+  count() %>%
+  pull(n) / nrow(data) * 100
+
+data %>%
+  select(address) %>%
+  slice_sample(n=20)
+
+data %>%
+  select(address) %>%
+  janitor::get_dupes() %>%
+  count(address , sort = T) %>%
+  print(n=1000)
+```
+
+We seem to have companies that made purchases but their addresses were not recorded , maybe these were individuals making the purchases or there might be a database out there that records these addresses , since company_id exist .
+
+Since the missing values are less than 10% we can drop these missing values because they wont have that much affect on final result if we do , or we can replace them with "other" for now .
+
+Also , we notice that we have different companies with multiple addresses , one explanation is that the companies are in same building / address but that is absurd for the 1071 companies that share the same address of "71-75 SHELTON STREET,\nCOVENT GARDEN,\nLONDON,\nUNITED KINGDOM,\nWC2H 9JQ" . So here i think the best course of action would be to treat the companies with same address as one company . But this something to enquire about with stakeholders and since our goal is to find total spend by city , not number of customers by city , the duplicate address wont be a problem , they will fall under the correct city if we think about logically .
+
+For now we note this down and leave it as it in order to get our initial solution as fast as possible
+
+```{r}
+data <- data %>%
+  mutate(across(where(is.character),~ifelse(.x=="","OTHER",.x)))
+```
+
+## Fix the variables
+
+Clean our variables
+
+a)  Make sure the character variables are in a consistent format
+
+```{r}
+data <- data %>%
+  mutate(across(where(is.character),~str_to_upper(address)))
+```
+
+## Augment the data
+
+Extract the Cities from our addresses variable
+
+```{r}
+data %>%
+  slice_sample(n=20) %>%
+  pull(address) %>%
+  cat(sep = "\n\n")
+```
+
+> cat() = concatenate function , is paste() with collapse , we combine multiple element in vector into one long element seperating them by a string of our choosing
+
+Looking at our sample of addresses , using the city of LONDON as an example , we see that a common pattern with address that contain tthe City of LONDON , they all have the city written as "LONDON," . All other cities follow the same pattern , so we can use this pattern to extracting Cities from our addresses .
+
+Now , we have issue , some address dont have a mention of the cities , they use town names without mentioning of the cities so we will require town names list of each city in order to get the cities
+
+Another option is using postal codes in order to get our cities , since all samples have postal codes , but this will require a postal codes dataset of each city to accomplish
+
+Another possible option is sending all our addresses to an API like Google API which we could be able to easy extract city name from the data it returns . This option raises privacy concerns , are we even allowed to send locations data of our customers to an API ?
+
+For now since we want to reach our initial solution as quick as possible , we go with simpler example and note others down .
+
+Make sure that our method will work for all address with different number of lines
+
+```{r}
+data <- data %>%
+  mutate(list = strsplit(address,"\n")) %>%
+  rowwise() %>%
+  mutate(lines = length(list))%>%
+  select(-list) %>%
+  ungroup()
+
+
+for(num in 1:6){
+  cat(paste("\n\n\n\n", num , "line addresses","--------------------------------------------------------------------------------------","\n\n"))
+  data %>%
+    filter(lines == num)%>%
+    select(address) %>%
+    distinct() %>%
+    slice_sample(n=10)%>%
+    pull(address)%>%
+    cat(sep = "\n\n")
+}
+
+
+data <- data %>%
+  mutate(address = ifelse(address == "REFER TO PARENT REGISTRY","OTHER",address))
+```
+
+New Issue :
+
+For 1 line addresses we have an address called "REFER TO PARENT REGISTRY " , which is not a real address . Its a clue that there is indeed some other database out there we can use to find addresses for other companies .
+
+For now we note this down and then replace these addresses with other just like we did for EMPTY addresses .
+
+Our method will work for addresses with more than 2 lines , for those with less than on line we need a different expression ...
+
+"\\nLONDON," for more than 2 lines ,
+
+"\\n\$LONDON\$" for 2 lines , then
+
+"\$LONDON\$" or ", LONDON\$" for 1 line
+
+## Look for list of all UK cities on the internet
+
+Eaziest way to do this is to copy and paste our cities into a spreadsheet then save it as .csv
+
+Load city data and make sure it is in consistent format as our address column in our data
+
+```{r}
+city_data <- read.csv(here("data/cities.csv")) %>% as_tibble() %>%
+  janitor::clean_names()
+
+city_data <- city_data %>%
+  mutate(cities = str_to_upper(cities) %>% str_replace_all("\\*","")) %>%
+  distinct()
+
+city_data %>% print(n=100)
+```
+
+## Extract cities
+
+```{r}
+require(glue)
+
+data$city <- NA 
+
+for(city in city_data$cities){
+  
+  index <- grep(glue("\n{city},|\n${city}$|${city}$|{city}$"),data$address)
+  data$city[index] <- city
+  
+}
+
+for(num in 1:6){
+  cat(paste("\n\n\n\n", num , "line addresses","--------------------------------------------------------------------------------------","\n\n"))
+  data %>%
+    filter(lines == num)%>%
+    select(address,city) %>%
+    distinct()%>%
+    slice_sample(n=7)%>%
+    print(n=7)
+}
+
+data$city %>% unique()
+
+setdiff(city_data$cities,unique(data$city))
+```
+
+All cities had matches except "KINGSTON-UPON-HULL" , we have other issues too , address with cities BRIGHTON and Newcastle were not matches
+
+```{r}
+
+index <- grep(glue("\nHULL,|\n$HULL$|$HULL$|HULL$"),data$address)
+data$city[index] <- "HULL"
+
+index <- grep(glue("\nNEWCASTLE,|\n$NEWCASTLE$|$NEWCASTLE$|NEWCASTLE$"),data$address)
+data$city[index] <- "NEWCASTLE-UPON-TYNE"
+
+index <- grep(glue("\nBRIGHTON,|\n$BRIGHTON$|$BRIGHTON$|BRIGHTON$"),data$address)
+data$city[index] <- "BRIGHTON & HOVE"
+
+```
+
+```{r}
+data %>%
+  select(city,address) %>%
+  distinct() %>%
+  na.omit() %>%
+  count() %>%
+  pull(n) / length(unique(data$address)) * 100
+
+data <- data %>%
+  mutate(city = replace_na(city,"OTHER"))
+
+data %>% 
+  distinct(address,.keep_all = T)%>%
+  janitor::tabyl(city)%>%
+  arrange(desc(n))%>%
+  as_tibble()
+```
+
+Our approach seem to work just fine , and we were able to extract cities from 43% of all our data's unique addresses
+
+Assuming each distinct address represents a distinct customer , we see that MAJORITY of our customers are based in LONDON (16%) , the rest of the major cities are PALE in comparison (\<2%)
+
+## SAVE THE CLEAN DATA
+
+```{r}
+
+write.csv(data , here("data/clean.csv") , row.names = F)
+```

@@ -1,0 +1,109 @@
+---
+title: "ReadMe"
+author: "Lebintiti Kobe"
+format: gfm
+---
+
+# Project Brief
+
+------------------------------------------------------------------------
+
+> As an analyst for ProWidget Systems, a UK-based B2B (business-to-business) retailer, you’ve been asked to report on spending volumes for London-based customers versus those based in the rest of the United Kingdom. The board has supplied a high-level data extract containing all customers’ addresses and their total spending to date.
+>
+> They want to know :
+>
+> -   Which UK cities are currently underserved
+> -   Whether their customers are primarily London based
+
+# Data Structure
+
+This dataset contains 100K customer data showing their id , address and total spend since ProWidget opened
+
+![](data/dcroop.png)
+
+# Analysis Approach / Logical Framework
+
+------------------------------------------------------------------------
+
+## Assuming the results of analysis will be used just to get quick answers (not for any strategic
+
+## a. "Spending volumes"
+
+Used "Total Spend" metric
+
+It provides straight forward regional comparisons .
+
+## b. "Underserved" Cities
+
+Cities with low total spend compared to others .
+
+Any city that has total spend below the average total spend of all UK cities will be considered to be underserved . The average cities total spend provides a straight forward baseline we can use to figure out potentially underserved cities
+
+## c. Whether their customers are primarily London based ?
+
+City with the highest Total Spend will be considered city with primary customer base . High spend easily implies more customers , hence more transaction and more spend
+
+# Insights Deep Dive
+
+## 1. Spending Volumes Of London Compare To Other UK Cities
+
+![](images/DataVizOutputs/London%20vs%20OtherUK.png)
+
+![](images/DataVizOutputs/London%20Vs%20Other.png)
+
+London brings in almost the same sales revenue as all other UK major cities combined .
+
+## 2. Customer Base
+
+#### Top 10 Total Spend Cities
+
+![](images/DataVizOutputs/TopSpend.png)
+
+Since London has the highest total spend compared to other UK cities , then our customer base is primarily
+
+## 3. Underserved Cities
+
+#### Bottom 10 Total Spend Cities (Underserved)
+
+![](images/DataVizOutputs/LowSpend.png)
+
+Only cities with large populations have total spend greater than mean total spend , meaning the rest of the cities are potentially underserved .
+
+# Data Issues 
+
+#### Data has companies with Zero Total Spend 
+
+#### Data has multiple companies with same address , one address had over 1000 different companies 
+
+#### Data has companies that made purchases but addresses were not recorded 
+
+#### Not all addresses were in format that allowed us to extract city names from the addresses , at least with the method we chose which only managed to extract cities from only 43% of our data 
+
+# Further Possible Work 
+
+#### We can use a better method to extract city names from our addresses :
+
+1.  Current method used to extracting cities is looking up city names of government's list of all UK cities in our companies addresses
+2.  We can use postcodes in order to figure which city the addresses belong . But this will require Postcode Data of all UK cities .
+3.  We can send the addresses data to a MAPS API like google API to in return get city names that corresponds to each address . But this method raises privacy concerns , are we even allowed to send private customer data to an API ?
+
+#### We can find other potential database where customers who made purchase but their addresses were not records in our data are stored
+
+#### We can validate multiple companies with same addresses in our data 
+
+#### Include / exclude companies with zero spend from our data to get a more accurate representation of our current customer base .  
+
+### But before we can do extra work , we need to understand the business value of doing so . 
+
+# Business Value 
+
+## Uses Of Our Current Results : 
+
+1.  To get ball-park city level total spend / customer volume comparison
+2.  To get ball-park idea of which cities are potentially underserved
+
+## For Market Spend Allocation
+
+1.  We need a different and appropriate metric to understand cities with untapped customer acquisition opportunity like Total Spend per Capita , Number of customers from full consumer market .
+
+### What is the business value of iterating the current analysis ? 
